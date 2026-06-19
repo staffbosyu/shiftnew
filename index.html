@@ -1,0 +1,316 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <title>シフト提出フォーム</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <style>
+    :root { --primary-color: #4CAF50; --bg-color: #f4f7f6; --card-bg: #ffffff; --text-color: #333; }
+    body { font-family: sans-serif; background-color: var(--bg-color); color: var(--text-color); margin: 0; padding: 16px; padding-bottom: 80px; }
+    
+    .container { max-width: 500px; margin: 0 auto; }
+    .card { background: var(--card-bg); border-radius: 12px; padding: 20px; margin-bottom: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.05); }
+    h2 { margin-top: 0; font-size: 1.1rem; color: #444; }
+    label { display: block; margin-bottom: 8px; font-weight: bold; font-size: 0.85rem; }
+    input[type="text"], select, textarea { width: 100%; padding: 12px; margin-bottom: 16px; border: 1px solid #ccc; border-radius: 8px; box-sizing: border-box; font-size: 1rem; }
+    
+    /* タブメニュー */
+    .tab-menu { display: flex; background: #fff; border-bottom: 2px solid #ddd; margin-bottom: 20px; border-radius: 8px 8px 0 0; overflow: hidden; }
+    .tab-item { flex: 1; padding: 15px; text-align: center; cursor: pointer; font-weight: bold; color: #777; transition: 0.3s; }
+    .tab-item.active { color: var(--primary-color); border-bottom: 3px solid var(--primary-color); background: #f0f9f0; }
+    .content-section { display: none; }
+    .content-section.active { display: block; }
+
+    /* 案件一覧 */
+    .job-item { padding: 12px; border-bottom: 1px solid #eee; font-size: 0.95rem; line-height: 1.4; }
+    .job-item:last-child { border-bottom: none; }
+
+    /* カレンダー */
+    .calendar-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 10px; }
+    .calendar-header button { background: none; border: none; font-size: 1.2rem; cursor: pointer; padding: 10px; }
+    .calendar-grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 5px; text-align: center; }
+    .day-name { font-size: 0.75rem; color: #777; padding-bottom: 5px; }
+    .calendar-day { padding: 15px 0; background-color: #eee; border-radius: 8px; cursor: not-allowed; font-size: 1rem; color: #aaa; }
+    .calendar-day.is-selectable { background-color: #fff; border: 1px solid #ddd; cursor: pointer; color: #333; }
+    .calendar-day.has-data { background-color: #e8f5e9; border: 2px solid var(--primary-color); font-weight: bold; color: var(--primary-color); }
+    
+    /* ボタン */
+    .btn { width: 100%; padding: 16px; background-color: var(--primary-color); color: white; border: none; border-radius: 8px; font-size: 1rem; font-weight: bold; cursor: pointer; }
+    .btn:disabled { background-color: #ccc; cursor: not-allowed; }
+    .btn-secondary { background-color: #757575; margin-top: 8px; }
+    .btn-danger { background-color: #f44336; margin-top: 8px; }
+
+    /* モーダル等 */
+    #modalOverlay, #previewModalOverlay, #customDialogOverlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); justify-content: center; align-items: center; z-index: 1000; }
+    .modal-content, .preview-content, .custom-dialog { background: white; padding: 20px; border-radius: 12px; width: 90%; max-width: 400px; box-sizing: border-box; max-height: 90vh; overflow-y: auto; }
+    .preview-list { overflow-y: auto; margin-bottom: 15px; border: 1px solid #ccc; border-radius: 8px; padding: 10px; background: #f9f9f9; }
+    .preview-item { border-bottom: 1px dashed #ccc; padding: 10px 0; }
+    .preview-date { font-weight: bold; color: var(--primary-color); margin-bottom: 5px; }
+    .preview-detail { font-size: 0.85rem; color: #333; }
+    #loading { display: none; text-align: center; margin-top: 10px; color: var(--primary-color); font-weight: bold; }
+    .dialog-buttons { display: flex; gap: 10px; flex-direction: column; }
+  </style>
+</head>
+<body>
+
+<div class="container">
+  <div class="tab-menu">
+    <div class="tab-item active" onclick="switchTab('form')">シフト提出</div>
+    <div class="tab-item" onclick="switchTab('jobs')">案件一覧</div>
+  </div>
+  
+  <div id="formSection" class="content-section active">
+    <div class="card">
+      <h2>プロフィール</h2>
+      <label>スタッフID</label>
+      <input type="text" id="staffId" value="" placeholder="例: S1001">
+      <label>名前</label>
+      <input type="text" id="staffName" value="" placeholder="例: 山田 太郎">
+    </div>
+
+    <div class="card">
+      <div class="calendar-header">
+        <button onclick="changeMonth(-1)">◀</button>
+        <h2 id="monthYear" style="margin:0;"></h2>
+        <button onclick="changeMonth(1)">▶</button>
+      </div>
+      <div class="calendar-grid" id="calendarGrid"></div>
+      <p style="font-size:0.75rem; color:#666; margin-top:10px;">※白枠の日付のみ選択可能です。</p>
+    </div>
+    <button class="btn" id="submitBtn" onclick="openPreview()">シフトを確認する</button>
+  </div>
+
+  <div id="jobsSection" class="content-section">
+    <div class="card">
+      <h2>案件一覧(ここに掲載されていない現場もあります)</h2>
+      <div id="jobListContainer">読み込み中...</div>
+    </div>
+  </div>
+</div>
+
+<div id="modalOverlay">
+  <div class="modal-content">
+    <h2 id="modalDateDisplay">日付</h2>
+    <div class="modal-description" style="font-size:0.8rem; background:#f9f9f9; padding:10px; border-left:4px solid var(--primary-color); margin-bottom:10px;"> 
+        ・時間指定がある場合は、開始時間と終了時間を選択してください※時間指定がない場合は”指定なし”を選択<br>
+        ・勤務可能エリアに制限がある場合は希望勤務地を選択してください<br>
+        ・現場希望に関しては備考欄に「○○(会場名/複数選択可)希望」と明記して下さい<br>
+        ※エリアの限定は出来ますが、現場に関しては希望のみお受けできます<br>
+        ※現場希望に関してはあくまで希望として伺っていますので別現場で勤務して頂く可能性もあります
+    </div>
+    <label>開始時間</label>
+    <select id="modalStartTime"><option value="">指定なし</option></select>
+    <label>終了時間</label>
+    <select id="modalEndTime"><option value="">指定なし</option><option value="終電まで">終電まで</option></select>
+    <label>その他備考</label>
+    <textarea id="modalNotes" rows="2"></textarea>
+    <button class="btn" onclick="saveShiftDetails()">この日の希望を保存</button>
+    <button class="btn btn-danger" onclick="deleteShiftDetails()">この日の希望をクリア</button>
+    <button class="btn btn-secondary" onclick="closeModal()">キャンセル</button>
+  </div>
+</div>
+
+<div id="previewModalOverlay">
+  <div class="preview-content">
+    <h2>送信内容の確認</h2>
+    <div id="previewList" class="preview-list"></div>
+    <div id="loading">送信中...</div>
+    <div class="dialog-buttons" id="previewButtons">
+      <button class="btn" onclick="executeSubmit()">この内容で送信する</button>
+      <button class="btn btn-secondary" onclick="closePreview()">修正に戻る</button>
+    </div>
+  </div>
+</div>
+
+<div id="customDialogOverlay">
+  <div class="custom-dialog">
+    <p id="customDialogMessage"></p>
+    <button class="btn" id="customDialogOk">OK</button>
+  </div>
+</div>
+
+<script>
+  // ★ここに新しいGASのWebアプリケーションURLを貼り付けてください★
+  const GAS_URL = 'https://script.google.com/macros/s/AKfycbxFi8qKW6MjVeM8C74i1CMirOUTnOxuRVLjulDVWay_eSA8a5zujtt7kuntAirN9ZrV/exec';
+
+  let selectableDates = [];
+  let jobList = [];
+  let currentDate = new Date();
+  let shiftData = {};
+  let currentlyEditingDate = null;
+
+  // 共通の通信関数 (fetchを使用)
+  function callGasApi(params) {
+    const url = new URL(GAS_URL);
+    Object.keys(params).forEach(key => url.searchParams.append(key, params[key]));
+    return fetch(url).then(res => {
+      if (!res.ok) throw new Error('通信エラーが発生しました。');
+      return res.json();
+    });
+  }
+ 
+  window.onload = function() {
+    initTimeOptions();
+    
+    // URLパラメータから id と name を取得してセット
+    const urlParams = new URLSearchParams(window.location.search);
+    const staffIdParam = urlParams.get('id') || '';
+    const staffNameParam = urlParams.get('name') || '';
+    
+    if (staffIdParam) document.getElementById('staffId').value = staffIdParam;
+    if (staffNameParam) document.getElementById('staffName').value = staffNameParam;
+
+    // GASから初期データを一括取得
+    callGasApi({ action: 'getInitialData' })
+      .then(data => {
+        selectableDates = data.selectableDates || [];
+        jobList = data.jobList || [];
+        renderCalendar();
+        renderJobList();
+      })
+      .catch(err => {
+        showCustomAlert('データの初期読み込みに失敗しました: ' + err.message);
+      });
+  };
+
+  // タブ切り替え関数
+  function switchTab(tab) {
+    document.querySelectorAll('.tab-item').forEach(el => el.classList.remove('active'));
+    document.querySelectorAll('.content-section').forEach(el => el.classList.remove('active'));
+    
+    if(tab === 'form') {
+      document.querySelector('.tab-item:nth-child(1)').classList.add('active');
+      document.getElementById('formSection').classList.add('active');
+    } else {
+      document.querySelector('.tab-item:nth-child(2)').classList.add('active');
+      document.getElementById('jobsSection').classList.add('active');
+    }
+  }
+
+  // 案件一覧の描画
+  function renderJobList() {
+    const container = document.getElementById('jobListContainer');
+    if (jobList.length === 0) {
+      container.innerHTML = '<p style="color:#999; font-size:0.9rem;">現在、公開されている案件はありません。</p>';
+      return;
+    }
+    container.innerHTML = jobList.map(job => `<div class="job-item">${job.replace(/\n/g, '<br>')}</div>`).join('');
+  }
+
+  function initTimeOptions() {
+    const s = document.getElementById('modalStartTime');
+    const e = document.getElementById('modalEndTime');
+    for (let i = 6; i < 24; i++) {
+      const opt = document.createElement('option');
+      opt.value = opt.text = `${i}:00`;
+      s.add(opt.cloneNode(true));
+      e.insertBefore(opt, e.lastElementChild);
+    }
+  }
+
+  function renderCalendar() {
+    const year = currentDate.getFullYear();
+    const month = currentDate.getMonth();
+    document.getElementById('monthYear').innerText = `${year}年 ${month + 1}月`;
+    const first = new Date(year, month, 1).getDay();
+    const last = new Date(year, month + 1, 0).getDate();
+    const grid = document.getElementById('calendarGrid');
+    
+    grid.innerHTML = '';
+    ['日','月','火','水','木','金','土'].forEach(d => grid.innerHTML += `<div class="day-name">${d}</div>`);
+    for (let i = 0; i < first; i++) grid.innerHTML += `<div></div>`;
+    for (let i = 1; i <= last; i++) {
+      const ds = `${year}-${String(month + 1).padStart(2, '0')}-${String(i).padStart(2, '0')}`;
+      const isS = selectableDates.includes(ds);
+      const hasD = shiftData[ds] ? 'has-data' : '';
+      grid.innerHTML += `<div class="calendar-day ${isS ? 'is-selectable' : ''} ${hasD}" ${isS ? `onclick="openModal('${ds}')"` : ''}>${i}</div>`;
+    }
+  }
+
+  function changeMonth(dir) { currentDate.setMonth(currentDate.getMonth() + dir); renderCalendar(); }
+  
+  function openModal(ds) {
+    currentlyEditingDate = ds;
+    document.getElementById('modalDateDisplay').innerText = ds + ' の希望';
+    const d = shiftData[ds] || { startTime: '', endTime: '', notes: '' };
+    document.getElementById('modalStartTime').value = d.startTime;
+    document.getElementById('modalEndTime').value = d.endTime;
+    document.getElementById('modalNotes').value = d.notes;
+    document.getElementById('modalOverlay').style.display = 'flex';
+  }
+  
+  function closeModal() { document.getElementById('modalOverlay').style.display = 'none'; }
+  
+  function saveShiftDetails() {
+    shiftData[currentlyEditingDate] = {
+      startTime: document.getElementById('modalStartTime').value,
+      endTime: document.getElementById('modalEndTime').value,
+      notes: document.getElementById('modalNotes').value
+    };
+    closeModal(); renderCalendar();
+  }
+  
+  function deleteShiftDetails() { delete shiftData[currentlyEditingDate]; closeModal(); renderCalendar(); }
+
+  function openPreview() {
+    const id = document.getElementById('staffId').value.trim();
+    const nm = document.getElementById('staffName').value.trim();
+    if (!id || !nm) { showCustomAlert('スタッフIDと名前を入力してください。'); return; }
+    const shifts = Object.keys(shiftData).sort().map(date => ({ date, ...shiftData[date] }));
+    if (shifts.length === 0) { showCustomAlert('シフトが入力されていません。'); return; }
+    
+    const previewList = document.getElementById('previewList');
+    previewList.innerHTML = `<div class="preview-item">ID: ${id}<br>氏名: ${nm}</div>`;
+    
+    shifts.forEach(s => {
+      const timeStr = (s.startTime || s.endTime) ? `${s.startTime || '指定なし'} 〜 ${s.endTime || '指定なし'}` : '時間指定なし';
+      previewList.innerHTML += `<div class="preview-item"><div class="preview-date">${s.date}</div><div class="preview-detail">時間: ${timeStr}</div>${s.notes ? `<div class="preview-detail">備考: ${s.notes}</div>` : ''}</div>`;
+    });
+    document.getElementById('previewModalOverlay').style.display = 'flex';
+  }
+
+  function closePreview() { document.getElementById('previewModalOverlay').style.display = 'none'; }
+
+  function executeSubmit() {
+    const id = document.getElementById('staffId').value.trim();
+    const nm = document.getElementById('staffName').value.trim();
+    const shifts = Object.keys(shiftData).sort().map(date => ({ date, ...shiftData[date] }));
+    
+    document.getElementById('previewButtons').style.display = 'none';
+    document.getElementById('loading').style.display = 'block';
+    
+    // APIへデータを送信
+    callGasApi({
+      action: 'submitShifts',
+      data: JSON.stringify({ staffId: id, name: nm, shifts: shifts })
+    })
+    .then(res => {
+      closePreview();
+      document.getElementById('previewButtons').style.display = 'flex';
+      document.getElementById('loading').style.display = 'none';
+
+      if (res.success) {
+        showCustomAlert('送信が完了しました！', () => { shiftData = {}; renderCalendar(); });
+      } else {
+        showCustomAlert('エラーが発生しました: ' + res.error);
+      }
+    })
+    .catch(err => {
+      closePreview();
+      showCustomAlert('通信エラーが発生しました。');
+      document.getElementById('previewButtons').style.display = 'flex';
+      document.getElementById('loading').style.display = 'none';
+    });
+  }
+
+  function showCustomAlert(msg, callback) {
+    document.getElementById('customDialogMessage').innerText = msg;
+    document.getElementById('customDialogOverlay').style.display = 'flex';
+    document.getElementById('customDialogOk').onclick = () => {
+      document.getElementById('customDialogOverlay').style.display = 'none';
+      if (callback) callback();
+    };
+  }
+</script>
+</body>
+</html>
